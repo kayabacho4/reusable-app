@@ -1,0 +1,68 @@
+services:
+  db:
+    build:
+      context: ./reusable-db
+      dockerfile: Dockerfile
+    container_name: sns_mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: sns_app
+      MYSQL_USER: sns_user
+      MYSQL_PASSWORD: sns_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./logs:/var/log/mysql
+    networks:
+      - sns_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "sns_user", "-p${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./reusable-api
+      dockerfile: Dockerfile
+    container_name: sns_api
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=mysql+pymysql://sns_user:sns_password@db:3306/sns_app
+    networks:
+      - sns_network
+    volumes:
+      - ./reusable-api:/app
+
+  ui:
+    build:
+      context: ./reusable-ui
+      dockerfile: Dockerfile
+    container_name: sns_ui
+    restart: always
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    environment:
+      - VITE_API_URL=http://api:8000
+    networks:
+      - sns_network
+    volumes:
+      - ./reusable-ui:/app
+      - /app/node_modules
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  sns_network:
+    driver: bridge
